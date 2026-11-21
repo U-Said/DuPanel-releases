@@ -15,7 +15,7 @@ Dual-pane file manager in the spirit of Total Commander — for Windows, macOS, 
 | **Android 8.0+** (almost every phone) | [DuPanel-arm64.apk](https://github.com/U-Said/DuPanel-releases/releases/latest/download/DuPanel-arm64.apk) |
 | Android, universal | [DuPanel.apk](https://github.com/U-Said/DuPanel-releases/releases/latest/download/DuPanel.apk) |
 
-The links always point to the latest version. All versions are in [Releases](https://github.com/U-Said/DuPanel-releases/releases).
+The links always point to the latest version. All versions are in [Releases](https://github.com/U-Said/DuPanel-releases/releases). Windows, macOS and Linux builds of 1.06 are being prepared — for now only Android is available.
 
 ## What it does
 
@@ -33,10 +33,14 @@ The links always point to the latest version. All versions are in [Releases](htt
 
 **Windows.** Unpack the zip into any folder (for example `C:\Programs\DuPanel`) and run `DuPanel.exe`. Settings live next to it in `DuPanel.json` — the program is portable. To update, replace the folder contents.
 **macOS.** Unpack, move DuPanel to Applications. The first time, right-click → Open (the app is not notarized).
-**Linux.** Unpack, run `./dupanel`; `./install.sh` adds it to the applications menu. The built-in player needs libmpv (`sudo apt install libmpv2`).
+**Linux.** Unpack, run `./dupanel`; `./install.sh` adds it to the applications menu. Everything needed, the player included, is inside the package.
 **Android.** Open the APK on the phone and allow installing from this source. On first start DuPanel asks for access to all files — it needs it to manage files. The new 1.06 replaces the older DuPanel 1.12 for Android: uninstall the old one first if Android refuses to install over it.
 
 [Privacy policy](https://u-said.github.io/dupanel-privacy/) — DuPanel collects nothing; files go only to servers you connect to yourself.
+
+## Support the project
+
+DuPanel is free. If it helps you, you can [support the author with a voluntary donation](https://app.lava.top/4179967925).
 
 ---
 
@@ -55,7 +59,7 @@ The links always point to the latest version. All versions are in [Releases](htt
 | **Android 8.0+** (почти любой телефон) | [DuPanel-arm64.apk](https://github.com/U-Said/DuPanel-releases/releases/latest/download/DuPanel-arm64.apk) |
 | Android, универсальный | [DuPanel.apk](https://github.com/U-Said/DuPanel-releases/releases/latest/download/DuPanel.apk) |
 
-Ссылки всегда ведут на последнюю версию. Все версии — в [Releases](https://github.com/U-Said/DuPanel-releases/releases).
+Ссылки всегда ведут на последнюю версию. Все версии — в [Releases](https://github.com/U-Said/DuPanel-releases/releases). Сборки 1.06 для Windows, macOS и Linux готовятся — пока доступен только Android.
 
 ### Что умеет
 
@@ -73,9 +77,13 @@ The links always point to the latest version. All versions are in [Releases](htt
 
 **Windows.** Распакуйте архив в любую папку (например, `C:\Programs\DuPanel`) и запустите `DuPanel.exe`. Настройки лежат рядом, в `DuPanel.json` — программа портативная. Для обновления замените содержимое папки.
 **macOS.** Распакуйте и перенесите DuPanel в «Программы». В первый раз — правый щелчок → «Открыть» (программа не нотаризована).
-**Linux.** Распакуйте, запустите `./dupanel`; `./install.sh` добавит её в меню программ. Встроенному плееру нужна libmpv (`sudo apt install libmpv2`).
+**Linux.** Распакуйте, запустите `./dupanel`; `./install.sh` добавит её в меню программ. Всё нужное, включая плеер, уже внутри пакета.
 **Android.** Откройте APK на телефоне и разрешите установку из этого источника. При первом запуске DuPanel попросит доступ ко всем файлам — без него файловый менеджер не может работать. Новая версия 1.06 заменяет прежний DuPanel 1.12 для Android: если Android не ставит её поверх, сначала удалите старую.
 
 [Политика конфиденциальности](https://u-said.github.io/dupanel-privacy/) — DuPanel ничего не собирает; файлы уходят только на серверы, к которым вы подключаетесь сами.
+
+### Поддержать проект
+
+DuPanel бесплатен. Если он вам полезен, можно [поддержать автора добровольным донатом](https://app.lava.top/4179967925).
 
 © 2026 Umed SAIDOV

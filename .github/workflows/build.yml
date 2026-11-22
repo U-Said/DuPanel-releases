@@ -1,0 +1,468 @@
+# Сборка DuPanel для Windows x64/ARM64, macOS и Linux из закрытого репозитория U-Said/DuPanel.
+# Код берётся ключом развёртывания (только чтение, секрет DUPANEL_DEPLOY_KEY) и в этот открытый
+# репозиторий не попадает: наружу выходят только готовые пакеты, которые job «publish»
+# добавляет в выпуск. Запуск — только вручную владельцем (workflow_dispatch); секреты недоступны
+# чужим pull request'ам. Шаги сборки — копия .github/workflows/build.yml из U-Said/DuPanel.
+name: Build
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Ветка или тег U-Said/DuPanel"
+        default: v1.06
+      release:
+        description: "Выпуск, куда добавить пакеты (пусто — не публиковать)"
+        default: v1.06
+      targets:
+        description: "Что собирать"
+        type: choice
+        options: [all, windows, macos, linux]
+        default: all
+      mac_runner:
+        description: "Сервер для macOS (если у GitHub нет свободных Mac на Apple Silicon — Intel)"
+        type: choice
+        options: [macos-15, macos-15-intel, macos-14]
+        default: macos-15
+
+permissions:
+  contents: read
+
+jobs:
+  # Своя libmpv-2.dll для Windows x64 и ARM64 — из исходников, без GPL-частей (FFmpeg LGPL-2.1+,
+  # mpv -Dgpl=false), кросс-сборкой llvm-mingw в MSYS2 на x64-сервере. Кэш — по хэшу сценария сборки:
+  # пока tool/windows/build_libmpv.sh не меняется, готовая DLL берётся из кэша. Инструменты MSYS2
+  # (meson, cmake, ninja, nasm, python) берутся текущие и записываются в build-info.txt; если их смена
+  # ломает сборку или нужна пересборка на новых — увеличить число в «tools1» ключа кэша.
+  libmpv-windows:
+    if: inputs.targets == 'all' || inputs.targets == 'windows'
+    strategy:
+      fail-fast: false
+      matrix:
+        cpu: [x86_64, aarch64]
+    runs-on: windows-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: U-Said/DuPanel
+          ref: ${{ inputs.ref }}
+          ssh-key: ${{ secrets.DUPANEL_DEPLOY_KEY }}
+          persist-credentials: false
+
+      - name: Кэш libmpv ${{ matrix.cpu }}
+        id: libmpv-cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}\libmpv-out\${{ matrix.cpu }}
+          key: libmpv-windows-${{ matrix.cpu }}-tools1-${{ hashFiles('tool/windows/build_libmpv.sh') }}
+
+      - name: MSYS2 (UCRT64) для сборки
+        if: steps.libmpv-cache.outputs.cache-hit != 'true'
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: false
+          install: >-
+            make diffutils unzip
+            mingw-w64-ucrt-x86_64-cmake mingw-w64-ucrt-x86_64-meson mingw-w64-ucrt-x86_64-ninja
+            mingw-w64-ucrt-x86_64-nasm mingw-w64-ucrt-x86_64-pkgconf mingw-w64-ucrt-x86_64-python
+
+      - name: Сборка libmpv ${{ matrix.cpu }} (FFmpeg, dav1d, libjxl, libplacebo, libass)
+        if: steps.libmpv-cache.outputs.cache-hit != 'true'
+        shell: msys2 {0}
+        run: |
+          T=$(cygpath -u "$RUNNER_TEMP")
+          CACHE="$T/libmpv-win" OUT="$T/libmpv-out" bash tool/windows/build_libmpv.sh ${{ matrix.cpu }}
+
+      - name: Проверка libmpv ${{ matrix.cpu }}
+        shell: pwsh
+        run: |
+          $dir = "$env:RUNNER_TEMP\libmpv-out\${{ matrix.cpu }}"
+          Get-ChildItem $dir -Recurse | Format-Table FullName, Length -AutoSize
+          Get-Content "$dir\build-info.txt"
+          $text = [Text.Encoding]::ASCII.GetString([IO.File]::ReadAllBytes("$dir\libmpv-2.dll"))
+          foreach ($flag in '--enable-gpl', '--enable-version3', '--enable-nonfree') { if ($text.Contains($flag)) { throw "libmpv-2.dll: FFmpeg с $flag" } }
+          if (-not $text.Contains('LGPL version 2.1 or later')) { throw 'libmpv-2.dll: нет лицензии FFmpeg «LGPL version 2.1 or later»' }
+
+      # The DLLs are tried in the windows jobs (tool/mpv_smoke.dart), each on its own architecture.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: libmpv-windows-${{ matrix.cpu }}
+          path: ${{ runner.temp }}\libmpv-out\${{ matrix.cpu }}
+          if-no-files-found: error
+          retention-days: 3
+
+      # LGPL-2.1 §6: the exact source archives of the DLL (with SHA256SUMS and the build script) are
+      # published as DuPanel-libmpv-windows-sources.tar next to the Windows packages in
+      # DuPanel-releases; «О программе» links there. Same for both architectures — packed once.
+      - name: Архив исходников libmpv для релиза
+        if: matrix.cpu == 'x86_64'
+        shell: bash
+        run: |
+          T=$(cygpath -u "$RUNNER_TEMP")
+          CACHE="$T/libmpv-win" OUT="$T/libmpv-sources" bash tool/windows/build_libmpv.sh sources
+
+      - uses: actions/upload-artifact@v4
+        if: matrix.cpu == 'x86_64'
+        with:
+          name: DuPanel-libmpv-windows-sources
+          path: ${{ runner.temp }}\libmpv-sources\DuPanel-libmpv-windows-sources.tar
+          if-no-files-found: error
+          retention-days: 3
+
+  windows:
+    if: inputs.targets == 'all' || inputs.targets == 'windows'
+    needs: libmpv-windows
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x64
+            cpu: x86_64
+            runner: windows-latest
+            artifact: DuPanel-Windows
+          - arch: arm64
+            cpu: aarch64
+            runner: windows-11-arm
+            artifact: DuPanel-Windows-arm64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: U-Said/DuPanel
+          ref: ${{ inputs.ref }}
+          ssh-key: ${{ secrets.DUPANEL_DEPLOY_KEY }}
+          persist-credentials: false
+
+      - name: Flutter 3.50.0
+        shell: pwsh
+        run: |
+          git clone --depth 1 -b 3.50.0 https://github.com/flutter/flutter.git "$env:RUNNER_TEMP\flutter"
+          "$env:RUNNER_TEMP\flutter\bin" | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
+
+      - name: Flutter doctor
+        shell: pwsh
+        run: |
+          flutter config --no-analytics
+          flutter --version
+          flutter doctor -v
+
+      - name: Анализ и тесты
+        if: matrix.arch == 'x64'
+        shell: pwsh
+        run: |
+          flutter analyze
+          flutter test
+
+      - name: Кэш библиотек плеера
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}\media-libs
+          key: media-libs-windows-${{ matrix.arch }}-${{ hashFiles('tool/windows/media_libs.ps1') }}
+
+      - name: libmpv ${{ matrix.cpu }} из задачи libmpv-windows
+        uses: actions/download-artifact@v4
+        with:
+          name: libmpv-windows-${{ matrix.cpu }}
+          path: ${{ runner.temp }}\libmpv
+
+      # libmpv (своя сборка без GPL, с FFmpeg и всеми кодеками) и ANGLE своей архитектуры —
+      # в build\windows\<arch>, media_kit берёт их оттуда вместо своих x64-архивов.
+      - name: Библиотеки плеера для ${{ matrix.arch }}
+        shell: pwsh
+        run: tool/windows/media_libs.ps1 -Arch ${{ matrix.arch }} -Libmpv "$env:RUNNER_TEMP\libmpv"
+
+      - name: Сборка Windows ${{ matrix.arch }}
+        shell: pwsh
+        run: flutter build windows --release
+
+      - name: Проверка встроенного плеера
+        shell: pwsh
+        run: |
+          $rel = (Get-ChildItem build\windows -Recurse -Filter DuPanel.exe | Where-Object FullName -like '*Release*' | Select-Object -First 1).DirectoryName
+          $s = "$env:RUNNER_TEMP\samples"
+          New-Item -ItemType Directory -Force $s | Out-Null
+          Invoke-WebRequest https://raw.githubusercontent.com/nokiatech/heif/gh-pages/content/cc0/3B_HEIC_SDR.heic -OutFile "$s\photo.heic"
+          Invoke-WebRequest https://raw.githubusercontent.com/link-u/avif-sample-images/master/fox.profile0.10bpc.yuv420.avif -OutFile "$s\fox.avif"
+          # Зависимые DLL (vulkan-1.dll и др.) берутся из папки программы, как при запуске DuPanel.
+          $env:PATH = "$rel;$env:PATH"
+          dart tool/mpv_smoke.dart "$rel\libmpv-2.dll" "$s\photo.heic=8256x5504" "$s\fox.avif=1204x800"
+          if ($LASTEXITCODE -ne 0) { throw 'libmpv не работает' }
+          Remove-Item -Recurse $s
+
+      - name: 7-Zip в пакете
+        shell: pwsh
+        run: |
+          $rel = (Get-ChildItem build\windows -Recurse -Filter DuPanel.exe | Where-Object FullName -like '*Release*' | Select-Object -First 1).DirectoryName
+          $z = Join-Path $rel "7zip/7z.exe"
+          if (-not (Test-Path $z) -or -not (Test-Path (Join-Path $rel "7zip/7z.dll"))) { throw "Нет 7zip/7z.exe или 7zip/7z.dll" }
+          & $z a -bso0 "$env:RUNNER_TEMP/t.7z" README.md; if ($LASTEXITCODE) { throw "7z a: $LASTEXITCODE" }
+          & $z l -slt -sccUTF-8 "$env:RUNNER_TEMP/t.7z" | Select-String '^(Type|Path) = '
+          if ($LASTEXITCODE) { throw "7z l: $LASTEXITCODE" }
+
+      - name: Проверка архитектуры и архив
+        shell: pwsh
+        run: |
+          $rel = Get-ChildItem build\windows -Recurse -Filter DuPanel.exe | Where-Object FullName -like '*Release*' | Select-Object -First 1
+          "Собрано: $($rel.FullName)"
+          # Архитектура каждого .exe/.dll по заголовку PE: 0xAA64 = ARM64, 0x8664 = x64
+          $want = if ('${{ matrix.arch }}' -eq 'arm64') { 'ARM64' } else { 'x64' }
+          $bad = 0
+          foreach ($f in Get-ChildItem $rel.DirectoryName -Include *.exe, *.dll -Recurse) {
+            $b = [IO.File]::ReadAllBytes($f.FullName)
+            $pe = [BitConverter]::ToInt32($b, 0x3C)
+            $m = [BitConverter]::ToUInt16($b, $pe + 4)
+            $arch = switch ($m) { 0xAA64 { 'ARM64' } 0x8664 { 'x64' } 0xA641 { 'ARM64EC' } default { '0x{0:X4}' -f $m } }
+            "{0,-45} {1}" -f $f.Name, $arch
+            if ($arch -ne $want) { $bad++ }
+          }
+          if ($bad -gt 0) { throw "Не ${want}: $bad файл(ов)" }
+          # Everything F3 needs is inside the zip: PDFium, the player with ANGLE, 7-Zip and the VC++ runtime.
+          $need = 'pdfium.dll', 'libmpv-2.dll', 'libEGL.dll', 'libGLESv2.dll', 'vulkan-1.dll', 'vk_swiftshader.dll',
+            '7zip\7z.exe', '7zip\7z.dll', 'msvcp140.dll', 'vcruntime140.dll'
+          if ('${{ matrix.arch }}' -eq 'x64') { $need += 'vcruntime140_1.dll' }
+          $missing = $need | Where-Object { -not (Test-Path (Join-Path $rel.DirectoryName $_)) }
+          if ($missing) { throw "Нет в пакете: $($missing -join ', ')" }
+          if (Test-Path (Join-Path $rel.DirectoryName 'd3dcompiler_47.dll')) { throw 'd3dcompiler_47.dll (закрытая, есть в Windows) не должна попадать в пакет' }
+          # Every DLL a module imports is either in the package or a part of Windows itself.
+          $vs = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -property installationPath
+          $dumpbin = Get-ChildItem "$vs\VC\Tools\MSVC" -Recurse -Filter dumpbin.exe | Select-Object -First 1
+          $own = @{}; Get-ChildItem $rel.DirectoryName -Recurse -Include *.dll, *.exe | ForEach-Object { $own[$_.Name.ToLower()] = 1 }
+          $foreign = @()
+          foreach ($f in Get-ChildItem $rel.DirectoryName -Recurse -Include *.exe, *.dll) {
+            foreach ($d in (& $dumpbin.FullName /nologo /dependents $f.FullName | Where-Object { $_ -match '^\s+\S+\.dll\s*$' } | ForEach-Object { $_.Trim().ToLower() })) {
+              if ($own.ContainsKey($d) -or $d -match '^(api-ms-win-|ext-ms-)' -or (Test-Path "$env:SystemRoot\System32\$d")) {
+                if (-not $own.ContainsKey($d) -and $d -match '^(msvcp140|vcruntime140|concrt140)') { $foreign += "$($f.Name) → $d" }
+                continue
+              }
+              $foreign += "$($f.Name) → $d"
+            }
+          }
+          if ($foreign) { $foreign; throw 'Модули ссылаются на DLL, которых нет ни в пакете, ни в Windows' }
+          # DuPanel is closed source: nothing GPL. The bundled libmpv is our LGPL build (FFmpeg
+          # without --enable-gpl), and its build script goes with it (LGPL relinking / source).
+          $mpvText = [Text.Encoding]::ASCII.GetString([IO.File]::ReadAllBytes((Join-Path $rel.DirectoryName 'libmpv-2.dll')))
+          foreach ($flag in '--enable-gpl', '--enable-version3', '--enable-nonfree') {
+            if ($mpvText.Contains($flag)) { throw "libmpv-2.dll в пакете собрана с $flag (GPL / не LGPL-2.1)" }
+          }
+          if (-not $mpvText.Contains('LGPL version 2.1 or later')) { throw 'libmpv-2.dll в пакете: нет лицензии FFmpeg «LGPL version 2.1 or later»' }
+          foreach ($f in 'licenses\libmpv\build_libmpv.sh', 'licenses\libmpv\build-info.txt') {
+            if (-not (Test-Path (Join-Path $rel.DirectoryName $f))) { throw "Нет $f (LGPL: сценарий и состав сборки libmpv)" }
+          }
+          Compress-Archive -Path "$($rel.DirectoryName)\*" -DestinationPath ${{ matrix.artifact }}.zip
+          Get-Item ${{ matrix.artifact }}.zip | Format-List Name, Length
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.artifact }}.zip
+          retention-days: 3
+
+  macos:
+    if: inputs.targets == 'all' || inputs.targets == 'macos'
+    runs-on: ${{ inputs.mac_runner || 'macos-15' }}
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: U-Said/DuPanel
+          ref: ${{ inputs.ref }}
+          ssh-key: ${{ secrets.DUPANEL_DEPLOY_KEY }}
+          persist-credentials: false
+
+      - name: Flutter 3.50.0
+        run: |
+          git clone --depth 1 -b 3.50.0 https://github.com/flutter/flutter.git "$RUNNER_TEMP/flutter"
+          echo "$RUNNER_TEMP/flutter/bin" >> "$GITHUB_PATH"
+
+      - name: Flutter doctor
+        run: |
+          flutter config --no-analytics
+          flutter --version
+          flutter doctor -v
+
+      - name: Сборка macOS
+        run: flutter build macos --release
+
+      - name: 7-Zip в пакете
+        run: |
+          APP=build/macos/Build/Products/Release/DuPanel.app
+          # The official 7zz for macOS (version and SHA-256 in third_party/7zip/sevenzip.cmake).
+          cmake -DSEVENZIP_PLATFORM=mac -DSEVENZIP_OUT="$RUNNER_TEMP/7zip" -P third_party/7zip/sevenzip.cmake
+          cp "$RUNNER_TEMP/7zip/7zz" "$APP/Contents/MacOS/7zz"
+          mkdir -p "$APP/Contents/Resources/7zip" && cp "$RUNNER_TEMP/7zip/License.txt" "$APP/Contents/Resources/7zip/"
+          chmod +x "$APP/Contents/MacOS/7zz"
+          Z7=$(lipo -archs "$APP/Contents/MacOS/7zz"); echo "7zz: $Z7"
+          [[ "$Z7" == *arm64* && "$Z7" == *x86_64* ]] || { echo "7zz: нужны arm64 и x86_64"; exit 1; }
+          "$APP/Contents/MacOS/7zz" a -bso0 "$RUNNER_TEMP/t.7z" README.md
+          "$APP/Contents/MacOS/7zz" l -slt -sccUTF-8 "$RUNNER_TEMP/t.7z" | grep -E '^(Type|Path) = '
+
+      - name: Проверка и архив
+        run: |
+          APP=build/macos/Build/Products/Release/DuPanel.app
+          ls -la "$APP/Contents/MacOS"
+          ARCHS=$(lipo -archs "$APP/Contents/MacOS/DuPanel"); echo "Архитектуры: $ARCHS"
+          [[ "$ARCHS" == *arm64* && "$ARCHS" == *x86_64* ]] || { echo "Нужны arm64 и x86_64"; exit 1; }
+          PDFA=$(lipo -archs "$APP/Contents/Frameworks/libpdfium.dylib"); echo "PDFium: $PDFA"
+          [[ "$PDFA" == *arm64* && "$PDFA" == *x86_64* ]] || { echo "Нет универсальной libpdfium.dylib (просмотр PDF)"; exit 1; }
+          for lib in $(find "$APP/Contents/Frameworks" -maxdepth 1 \( -name '*.dylib' -o -name '*.framework' \)); do
+            f="$lib"; [[ -d "$lib" ]] && f="$lib/$(basename "$lib" .framework)"
+            [[ -f "$f" ]] && echo "$(basename "$lib"): $(lipo -archs "$f" 2>/dev/null)"
+          done
+          # Встроенный плеер: libmpv из пакета (картинки HEIC/AVIF — только для сведения).
+          MPV="$APP/Contents/Frameworks/Mpv.framework/Mpv"
+          [[ -f "$MPV" ]] || { echo "Нет Mpv.framework"; ls "$APP/Contents/Frameworks"; exit 1; }
+          echo "Mpv.framework: $(lipo -archs "$MPV")"
+          dart tool/mpv_smoke.dart --lenient "$MPV" || { echo "libmpv не работает"; exit 1; }
+          mkdir -p samples
+          curl -fsSL -o samples/photo.heic https://raw.githubusercontent.com/nokiatech/heif/gh-pages/content/cc0/3B_HEIC_SDR.heic
+          curl -fsSL -o samples/fox.avif https://raw.githubusercontent.com/link-u/avif-sample-images/master/fox.profile0.10bpc.yuv420.avif
+          dart tool/mpv_smoke.dart --lenient "$MPV" samples/photo.heic=8256x5504 || echo "(HEIC через libmpv на macOS не читается)"
+          dart tool/mpv_smoke.dart --lenient "$MPV" samples/fox.avif=1204x800 || echo "(AVIF через libmpv на macOS не читается)"
+          rm -rf samples
+          # Одинаковая ad-hoc подпись всего пакета (иначе на Apple Silicon вложенные библиотеки не загрузятся).
+          codesign --force --deep --sign - "$APP"
+          codesign --verify --deep --strict "$APP" && echo "Подпись в порядке"
+          plutil -p "$APP/Contents/Info.plist" | grep -E 'CFBundle(Identifier|ShortVersionString|Name|DisplayName)|LSMinimumSystemVersion'
+          ditto -c -k --sequesterRsrc --keepParent "$APP" DuPanel-macOS.zip
+          ls -la DuPanel-macOS.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DuPanel-macOS
+          path: DuPanel-macOS.zip
+          retention-days: 3
+
+  linux:
+    if: inputs.targets == 'all' || inputs.targets == 'linux'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: U-Said/DuPanel
+          ref: ${{ inputs.ref }}
+          ssh-key: ${{ secrets.DUPANEL_DEPLOY_KEY }}
+          persist-credentials: false
+
+      - name: Пакеты для сборки
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev \
+            libstdc++-12-dev file patchelf nasm python3-pip libpulse-dev libasound2-dev \
+            libfreetype-dev libfribidi-dev libharfbuzz-dev libfontconfig-dev libbrotli-dev zlib1g-dev
+          pip3 install --user 'meson==1.6.1'
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          echo "MPV_PREFIX=$RUNNER_TEMP/libmpv-prefix" >> "$GITHUB_ENV"
+
+      - name: Кэш libmpv
+        id: libmpv-cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/libmpv-prefix
+          key: libmpv-linux-x64-${{ hashFiles('tool/linux/build_libmpv.sh') }}
+
+      # Своя libmpv со всеми кодеками (в Ubuntu 22.04 только mpv 0.34 и FFmpeg 4.4, без HEIC и JPEG XL).
+      - name: Сборка libmpv (FFmpeg, dav1d, libjxl, libplacebo, libass)
+        if: steps.libmpv-cache.outputs.cache-hit != 'true'
+        run: PREFIX="$MPV_PREFIX" WORK="$RUNNER_TEMP/libmpv-src" bash tool/linux/build_libmpv.sh
+
+      - name: Flutter 3.50.0
+        run: |
+          git clone --depth 1 -b 3.50.0 https://github.com/flutter/flutter.git "$RUNNER_TEMP/flutter"
+          echo "$RUNNER_TEMP/flutter/bin" >> "$GITHUB_PATH"
+
+      - name: Flutter doctor
+        run: |
+          flutter config --no-analytics --enable-linux-desktop
+          flutter --version
+          flutter doctor -v
+
+      - name: Сборка Linux
+        run: PKG_CONFIG_PATH="$MPV_PREFIX/lib/pkgconfig" flutter build linux --release
+
+      - name: libmpv и её библиотеки — внутрь программы
+        run: |
+          bash tool/linux/bundle_libs.sh build/linux/x64/release/bundle "$MPV_PREFIX"
+          # LGPL: the scripts that control the compilation of the bundled libmpv go with it.
+          mkdir -p build/linux/x64/release/bundle/licenses/libmpv
+          cp tool/linux/build_libmpv.sh tool/linux/bundle_libs.sh build/linux/x64/release/bundle/licenses/libmpv/
+
+      - name: Проверка встроенного плеера на чистых системах
+        run: |
+          mkdir -p samples
+          curl -fsSL -o samples/photo.heic https://raw.githubusercontent.com/nokiatech/heif/gh-pages/content/cc0/3B_HEIC_SDR.heic
+          curl -fsSL -o samples/fox.avif https://raw.githubusercontent.com/link-u/avif-sample-images/master/fox.profile0.10bpc.yuv420.avif
+          # Из системы — только GTK 3, как на обычном рабочем столе: ни libmpv, ни FFmpeg, ни звуковых библиотек.
+          cat > samples/check.sh <<'EOF'
+          B=build/linux/x64/release/bundle
+          if ldd "$B/dupanel" "$B"/lib/*.so* | grep -v libjvm | grep "not found"; then echo "Не хватает библиотек"; exit 1; fi
+          /dart/bin/dart tool/mpv_smoke.dart "$B/lib/libmpv.so.2" "samples/photo.heic=8256x5504" "samples/fox.avif=1204x800"
+          EOF
+          DART="$RUNNER_TEMP/flutter/bin/cache/dart-sdk"
+          for img in ubuntu:22.04 ubuntu:24.04 debian:12; do
+            echo "=== $img"
+            docker run --rm -v "$PWD:/w" -v "$DART:/dart:ro" -w /w -e DEBIAN_FRONTEND=noninteractive "$img" bash -c \
+              'apt-get update -qq && (apt-get install -y -qq libgtk-3-0 || apt-get install -y -qq libgtk-3-0t64) >/dev/null && bash samples/check.sh'
+          done
+          echo "=== fedora:41"
+          docker run --rm -v "$PWD:/w" -v "$DART:/dart:ro" -w /w fedora:41 bash -c 'dnf install -y -q gtk3 >/dev/null && bash samples/check.sh'
+          rm -rf samples
+
+      - name: Проверка и архив
+        run: |
+          B=build/linux/x64/release/bundle
+          ls -la "$B" "$B/lib"
+          file "$B/dupanel"
+          # Свои библиотеки (и libmpv со всем нужным ей) — в lib/ рядом; из системы — GTK 3 и ниже.
+          if ldd "$B/dupanel" "$B"/lib/*.so* | grep -v libjvm | grep "not found"; then echo "Не хватает библиотек"; exit 1; fi
+          # The plugin must use the bundled libmpv.so.2 (RUNPATH $ORIGIN), never the system's.
+          for so in "$B"/lib/*.so*; do printf '%-45s %s\n' "$(basename "$so")" "$(readelf -d "$so" | grep -oE '(RUNPATH|RPATH).*' || echo '-')"; done
+          read -r MPV_NAME MPV_PATH < <(ldd "$B/lib/libmedia_kit_video_plugin.so" | awk '/libmpv/ { print $1, $3 }'); echo "libmpv: $MPV_NAME => $MPV_PATH"
+          [[ "$MPV_NAME" == libmpv.so.2 && "$(realpath "$MPV_PATH")" == "$(realpath "$B/lib/libmpv.so.2")" ]] || { echo "libmedia_kit_video_plugin.so берёт libmpv не из пакета"; exit 1; }
+          [[ -f "$B/licenses/libmpv/build_libmpv.sh" ]] || { echo "Нет сценария сборки libmpv (LGPL)"; exit 1; }
+          du -sh "$B/lib"
+          [[ -f "$B/lib/libpdfium.so" ]] || { echo "Нет lib/libpdfium.so (просмотр PDF)"; exit 1; }
+          echo "glibc: $(ldd --version | head -1)"
+          # 7-Zip: the static 7zz of the official package (third_party/7zip), needs nothing from the system.
+          file "$B/7zip/7zz"
+          "$B/7zip/7zz" a -bso0 "$RUNNER_TEMP/t.7z" README.md
+          "$B/7zip/7zz" l -slt -sccUTF-8 "$RUNNER_TEMP/t.7z" | grep -E '^(Type|Path) = '
+          cp linux/packaging/install.sh linux/packaging/README.txt "$B/"
+          chmod +x "$B/dupanel" "$B/install.sh"
+          mkdir -p out && cp -r "$B" out/DuPanel
+          tar -C out -czf DuPanel-Linux.tar.gz DuPanel
+          ls -la DuPanel-Linux.tar.gz
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DuPanel-Linux
+          path: DuPanel-Linux.tar.gz
+          retention-days: 3
+
+  # Готовые пакеты — в выпуск DuPanel-releases (постоянные имена, на них ведёт README).
+  publish:
+    if: always() && inputs.release != '' && !cancelled()
+    needs: [libmpv-windows, windows, macos, linux]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dl
+      - name: Добавить в выпуск ${{ inputs.release }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -e
+          files=()
+          for f in DuPanel-Windows.zip DuPanel-Windows-arm64.zip DuPanel-macOS.zip DuPanel-Linux.tar.gz DuPanel-libmpv-windows-sources.tar; do
+            p=$(find dl -name "$f" -type f | head -1)
+            [ -n "$p" ] && files+=("$p") || echo "::warning::нет $f"
+          done
+          [ ${#files[@]} -gt 0 ] || { echo "::error::нечего публиковать"; exit 1; }
+          gh release upload "${{ inputs.release }}" "${files[@]}" --clobber --repo "$GITHUB_REPOSITORY"
+          ls -la "${files[@]}"

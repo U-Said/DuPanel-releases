@@ -10,10 +10,14 @@ on:
     inputs:
       ref:
         description: "Ветка или тег U-Said/DuPanel"
-        default: v1.06
+        default: main
+      publish:
+        description: "Опубликовать пакеты в выпуск (только с разрешения владельца)"
+        type: boolean
+        default: false
       release:
-        description: "Выпуск, куда добавить пакеты (пусто — не публиковать)"
-        default: v1.06
+        description: "Тег выпуска, куда добавить пакеты (нужен только при publish)"
+        default: ""
       targets:
         description: "Что собирать"
         type: choice
@@ -129,12 +133,30 @@ jobs:
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 90
     steps:
-      - uses: actions/checkout@v4
-        with:
-          repository: U-Said/DuPanel
-          ref: ${{ inputs.ref }}
-          ssh-key: ${{ secrets.DUPANEL_DEPLOY_KEY }}
-          persist-credentials: false
+      # Своё скачивание кода: на windows-11-arm actions/checkout кладёт ключ с правами, которые
+      # OpenSSH отвергает («UNPROTECTED PRIVATE KEY FILE»). Ключ — только для этого шага, затем удаляется.
+      - name: Код U-Said/DuPanel (${{ inputs.ref }})
+        shell: pwsh
+        env:
+          DEPLOY_KEY: ${{ secrets.DUPANEL_DEPLOY_KEY }}
+          REF: ${{ inputs.ref }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $k = Join-Path $env:RUNNER_TEMP 'dupanel_key'
+          $kh = Join-Path $env:RUNNER_TEMP 'dupanel_known_hosts'
+          [IO.File]::WriteAllText($k, $env:DEPLOY_KEY.Trim().Replace("`r", '') + "`n")
+          icacls $k /inheritance:r /grant:r "$($env:USERNAME):(R)" | Out-Null
+          [IO.File]::WriteAllText($kh, "github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl`n")
+          $env:GIT_SSH_COMMAND = "C:/Windows/System32/OpenSSH/ssh.exe -i `"$($k -replace '\\','/')`" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=`"$($kh -replace '\\','/')`""
+          try {
+            git init -q .
+            git remote add origin git@github.com:U-Said/DuPanel.git
+            git fetch -q --depth 1 origin $env:REF
+            if ($LASTEXITCODE) { throw "git fetch $env:REF failed" }
+            git checkout -q FETCH_HEAD
+            if ($LASTEXITCODE) { throw 'git checkout failed' }
+            git log -1 --format='%h %s'
+          } finally { Remove-Item $k, $kh -Force -ErrorAction SilentlyContinue }
 
       - name: Flutter 3.50.0
         shell: pwsh
@@ -177,6 +199,16 @@ jobs:
       - name: Сборка Windows ${{ matrix.arch }}
         shell: pwsh
         run: flutter build windows --release
+
+      # flutter прячет вывод CMake при падении шага установки — показать его.
+      - name: Подробности ошибки установки
+        if: failure()
+        shell: pwsh
+        run: |
+          $d = Get-ChildItem build\windows -Directory | Select-Object -First 1
+          Push-Location $d.FullName
+          cmake -DBUILD_TYPE=Release -P cmake_install.cmake 2>&1 | Select-Object -Last 60
+          Pop-Location
 
       - name: Проверка встроенного плеера
         shell: pwsh
@@ -444,7 +476,7 @@ jobs:
 
   # Готовые пакеты — в выпуск DuPanel-releases (постоянные имена, на них ведёт README).
   publish:
-    if: always() && inputs.release != '' && !cancelled()
+    if: always() && inputs.publish && inputs.release != '' && !cancelled()
     needs: [libmpv-windows, windows, macos, linux]
     runs-on: ubuntu-latest
     permissions:

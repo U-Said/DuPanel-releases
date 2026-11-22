@@ -6,16 +6,7 @@ Dual-pane file manager in the spirit of Total Commander — for Windows, macOS, 
 
 ## Download
 
-| Platform | File |
-|---|---|
-| **Windows 10/11** (Intel/AMD) | [DuPanel-Windows.zip](https://github.com/U-Said/DuPanel-releases/releases/latest/download/DuPanel-Windows.zip) |
-| **Windows 11 on ARM** (Snapdragon: Surface Pro 11/12, Copilot+ PCs) | [DuPanel-Windows-arm64.zip](https://github.com/U-Said/DuPanel-releases/releases/latest/download/DuPanel-Windows-arm64.zip) |
-| **macOS 12 or later** (Apple Silicon and Intel) | [DuPanel-macOS.zip](https://github.com/U-Said/DuPanel-releases/releases/latest/download/DuPanel-macOS.zip) |
-| **Linux** (x64, desktops with GTK 3) | [DuPanel-Linux.tar.gz](https://github.com/U-Said/DuPanel-releases/releases/latest/download/DuPanel-Linux.tar.gz) |
-| **Android 8.0+** (almost every phone) | [DuPanel-arm64.apk](https://github.com/U-Said/DuPanel-releases/releases/latest/download/DuPanel-arm64.apk) |
-| Android, universal | [DuPanel.apk](https://github.com/U-Said/DuPanel-releases/releases/latest/download/DuPanel.apk) |
-
-The links always point to the latest version. All versions are in [Releases](https://github.com/U-Said/DuPanel-releases/releases). Windows, macOS and Linux builds of 1.06 are being prepared — for now only Android is available.
+Version 1.13 is in preparation and will come out for every system at once: Windows (Intel/AMD and ARM), macOS, Linux and Android. For now [DuPanel 1.12 for Android](https://u-said.github.io/dupanel-privacy/download) is available.
 
 ## What it does
 
@@ -50,16 +41,7 @@ DuPanel is free. If it helps you, you can [support the author with a voluntary d
 
 ### Скачать
 
-| Система | Файл |
-|---|---|
-| **Windows 10/11** (Intel/AMD) | [DuPanel-Windows.zip](https://github.com/U-Said/DuPanel-releases/releases/latest/download/DuPanel-Windows.zip) |
-| **Windows 11 на ARM** (Snapdragon: Surface Pro 11/12, Copilot+ PC) | [DuPanel-Windows-arm64.zip](https://github.com/U-Said/DuPanel-releases/releases/latest/download/DuPanel-Windows-arm64.zip) |
-| **macOS 12 и новее** (Apple Silicon и Intel) | [DuPanel-macOS.zip](https://github.com/U-Said/DuPanel-releases/releases/latest/download/DuPanel-macOS.zip) |
-| **Linux** (x64, рабочие столы с GTK 3) | [DuPanel-Linux.tar.gz](https://github.com/U-Said/DuPanel-releases/releases/latest/download/DuPanel-Linux.tar.gz) |
-| **Android 8.0+** (почти любой телефон) | [DuPanel-arm64.apk](https://github.com/U-Said/DuPanel-releases/releases/latest/download/DuPanel-arm64.apk) |
-| Android, универсальный | [DuPanel.apk](https://github.com/U-Said/DuPanel-releases/releases/latest/download/DuPanel.apk) |
-
-Ссылки всегда ведут на последнюю версию. Все версии — в [Releases](https://github.com/U-Said/DuPanel-releases/releases). Сборки 1.06 для Windows, macOS и Linux готовятся — пока доступен только Android.
+Версия 1.13 готовится и выйдет сразу для всех систем: Windows (Intel/AMD и ARM), macOS, Linux и Android. Пока доступна [DuPanel 1.12 для Android](https://u-said.github.io/dupanel-privacy/download).
 
 ### Что умеет
 

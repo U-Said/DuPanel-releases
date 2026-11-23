@@ -350,6 +350,9 @@ jobs:
           MPV="$APP/Contents/Frameworks/Mpv.framework/Mpv"
           [[ -f "$MPV" ]] || { echo "Нет Mpv.framework"; ls "$APP/Contents/Frameworks"; exit 1; }
           echo "Mpv.framework: $(lipo -archs "$MPV")"
+          # mpv_smoke loads Mpv.framework from the dart binary, which has no rpath to the app's Frameworks:
+          # its @rpath dependencies (Ass, Avcodec…) are looked up there as the app itself does.
+          export DYLD_FRAMEWORK_PATH="$APP/Contents/Frameworks" DYLD_LIBRARY_PATH="$APP/Contents/Frameworks"
           dart tool/mpv_smoke.dart --lenient "$MPV" || { echo "libmpv не работает"; exit 1; }
           mkdir -p samples
           curl -fsSL -o samples/photo.heic https://raw.githubusercontent.com/nokiatech/heif/gh-pages/content/cc0/3B_HEIC_SDR.heic

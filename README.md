@@ -6,11 +6,23 @@ Dual-pane file manager in the spirit of Total Commander — for Windows, macOS, 
 
 ## Download
 
-Version 1.13 is in preparation and will come out for every system at once: Windows (Intel/AMD and ARM), macOS, Linux and Android. For now [DuPanel 1.12 for Android](https://u-said.github.io/dupanel-privacy/download) is available.
+Version **1.13** — one version for every system.
+
+| Platform | File |
+|---|---|
+| **Windows 10/11** (Intel/AMD) | [DuPanel-Windows.zip](https://github.com/U-Said/DuPanel-releases/releases/latest/download/DuPanel-Windows.zip) |
+| **Windows 11 on ARM** (Snapdragon: Surface Pro 11/12, Copilot+ PCs) | [DuPanel-Windows-arm64.zip](https://github.com/U-Said/DuPanel-releases/releases/latest/download/DuPanel-Windows-arm64.zip) |
+| **macOS 12 or later** (Apple Silicon and Intel) | [DuPanel-macOS.zip](https://github.com/U-Said/DuPanel-releases/releases/latest/download/DuPanel-macOS.zip) |
+| **Linux** (x64, desktops with GTK 3) | [DuPanel-Linux.tar.gz](https://github.com/U-Said/DuPanel-releases/releases/latest/download/DuPanel-Linux.tar.gz) |
+| **Android 8.0+** (almost every phone) | [DuPanel-arm64.apk](https://github.com/U-Said/DuPanel-releases/releases/latest/download/DuPanel-arm64.apk) |
+| Android, universal | [DuPanel.apk](https://github.com/U-Said/DuPanel-releases/releases/latest/download/DuPanel.apk) |
+
+The links always point to the latest version. All versions and what is new are in [Releases](https://github.com/U-Said/DuPanel-releases/releases).
+
 
 ## What it does
 
-- **Two panels** with tabs, drive buttons, a clickable path line, columns (name, extension, size, date, attributes), natural sorting, quick search by typing, a name filter and folder history.
+- **Two panels** with drive buttons, a clickable path line, columns (name, extension, size, date, attributes), natural sorting, quick search by typing, a name filter and folder history.
 - **Total Commander keys:** F3 view, F4 edit, F5 copy, F6 move, F7 new folder, F8 delete, Alt+F7 search, Ctrl+M multi-rename, Insert / Space / Shift+arrows / Num+ / Num− to select. Every key can be reassigned.
 - **Safe file operations:** progress with cancel, a question for every name conflict (replace, skip, rename, older only), a moved file is deleted only after its copy is complete, nothing is written half-way under the real name.
 - **ZIP archives as folders:** open, copy in and out, pack, unpack, test.
@@ -25,7 +37,7 @@ Version 1.13 is in preparation and will come out for every system at once: Windo
 **Windows.** Unpack the zip into any folder (for example `C:\Programs\DuPanel`) and run `DuPanel.exe`. Settings live next to it in `DuPanel.json` — the program is portable. To update, replace the folder contents.
 **macOS.** Unpack, move DuPanel to Applications. The first time, right-click → Open (the app is not notarized).
 **Linux.** Unpack, run `./dupanel`; `./install.sh` adds it to the applications menu. Everything needed, the player included, is inside the package.
-**Android.** Open the APK on the phone and allow installing from this source. On first start DuPanel asks for access to all files — it needs it to manage files. The new 1.06 replaces the older DuPanel 1.12 for Android: uninstall the old one first if Android refuses to install over it.
+**Android.** Open the APK on the phone and allow installing from this source. On first start DuPanel asks for access to all files — it needs it to manage files. 1.13 installs over the older DuPanel 1.12 and keeps its settings.
 
 [Privacy policy](https://u-said.github.io/dupanel-privacy/) — DuPanel collects nothing; files go only to servers you connect to yourself.
 
@@ -41,11 +53,23 @@ DuPanel is free. If it helps you, you can [support the author with a voluntary d
 
 ### Скачать
 
-Версия 1.13 готовится и выйдет сразу для всех систем: Windows (Intel/AMD и ARM), macOS, Linux и Android. Пока доступна [DuPanel 1.12 для Android](https://u-said.github.io/dupanel-privacy/download).
+Версия **1.13** — одна версия для всех систем.
+
+| Система | Файл |
+|---|---|
+| **Windows 10/11** (Intel/AMD) | [DuPanel-Windows.zip](https://github.com/U-Said/DuPanel-releases/releases/latest/download/DuPanel-Windows.zip) |
+| **Windows 11 на ARM** (Snapdragon: Surface Pro 11/12, Copilot+ PC) | [DuPanel-Windows-arm64.zip](https://github.com/U-Said/DuPanel-releases/releases/latest/download/DuPanel-Windows-arm64.zip) |
+| **macOS 12 и новее** (Apple Silicon и Intel) | [DuPanel-macOS.zip](https://github.com/U-Said/DuPanel-releases/releases/latest/download/DuPanel-macOS.zip) |
+| **Linux** (x64, рабочий стол с GTK 3) | [DuPanel-Linux.tar.gz](https://github.com/U-Said/DuPanel-releases/releases/latest/download/DuPanel-Linux.tar.gz) |
+| **Android 8.0+** (почти любой телефон) | [DuPanel-arm64.apk](https://github.com/U-Said/DuPanel-releases/releases/latest/download/DuPanel-arm64.apk) |
+| Android, универсальный | [DuPanel.apk](https://github.com/U-Said/DuPanel-releases/releases/latest/download/DuPanel.apk) |
+
+Ссылки всегда ведут на последнюю версию. Все версии и что нового — в [Releases](https://github.com/U-Said/DuPanel-releases/releases).
+
 
 ### Что умеет
 
-- **Две панели** с вкладками, кнопками дисков, строкой пути с переходом по частям, колонками (имя, тип, размер, дата, атрибуты), естественной сортировкой, быстрым поиском набором имени, фильтром и историей папок.
+- **Две панели** с кнопками дисков, строкой пути с переходом по частям, колонками (имя, тип, размер, дата, атрибуты), естественной сортировкой, быстрым поиском набором имени, фильтром и историей папок.
 - **Клавиши Total Commander:** F3 просмотр, F4 правка, F5 копировать, F6 переместить, F7 папка, F8 удалить, Alt+F7 поиск, Ctrl+M групповое переименование, Insert / Пробел / Shift+стрелки / Num+ / Num− для выделения. Любую клавишу можно переназначить.
 - **Надёжные операции:** прогресс с отменой, вопрос при каждом совпадении имён (заменить, пропустить, переименовать, только более старые), перемещаемый файл удаляется только после полной копии, ничего не пишется наполовину под настоящим именем.
 - **ZIP-архивы как папки:** открыть, копировать внутрь и наружу, упаковать, распаковать, проверить.
@@ -60,7 +84,7 @@ DuPanel is free. If it helps you, you can [support the author with a voluntary d
 **Windows.** Распакуйте архив в любую папку (например, `C:\Programs\DuPanel`) и запустите `DuPanel.exe`. Настройки лежат рядом, в `DuPanel.json` — программа портативная. Для обновления замените содержимое папки.
 **macOS.** Распакуйте и перенесите DuPanel в «Программы». В первый раз — правый щелчок → «Открыть» (программа не нотаризована).
 **Linux.** Распакуйте, запустите `./dupanel`; `./install.sh` добавит её в меню программ. Всё нужное, включая плеер, уже внутри пакета.
-**Android.** Откройте APK на телефоне и разрешите установку из этого источника. При первом запуске DuPanel попросит доступ ко всем файлам — без него файловый менеджер не может работать. Новая версия 1.06 заменяет прежний DuPanel 1.12 для Android: если Android не ставит её поверх, сначала удалите старую.
+**Android.** Откройте APK на телефоне и разрешите установку из этого источника. При первом запуске DuPanel попросит доступ ко всем файлам — без него файловый менеджер не может работать. 1.13 ставится поверх прежнего DuPanel 1.12, настройки сохраняются.
 
 [Политика конфиденциальности](https://u-said.github.io/dupanel-privacy/) — DuPanel ничего не собирает; файлы уходят только на серверы, к которым вы подключаетесь сами.
 

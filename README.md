@@ -2,7 +2,7 @@
 
 Dual-pane file manager in the spirit of Total Commander — for Windows, macOS, Linux and Android. One program, native on every system. Free, no ads, no data collection.
 
-[Русский ниже ↓](#русский)
+**Website: [dupanel.dev](https://dupanel.dev)** · [Русский ниже ↓](#русский)
 
 ## Download
 
@@ -50,6 +50,8 @@ DuPanel is free. If it helps you, you can [support the author with a voluntary d
 ## Русский
 
 Двухпанельный файловый менеджер в духе Total Commander — для Windows, macOS, Linux и Android. Одна программа, родная на каждой системе. Бесплатно, без рекламы и без сбора данных.
+
+**Сайт: [dupanel.dev](https://dupanel.dev)**
 
 ### Скачать
 

@@ -691,3 +691,45 @@ jobs:
           if [ "${{ inputs.replace }}" = "true" ]; then clobber=--clobber; else clobber=; fi
           gh release upload "${{ inputs.release }}" "${files[@]}" $clobber --repo "$GITHUB_REPOSITORY"
           ls -la "${files[@]}"
+
+  # Package manifests after a release (DECISIONS.md, "Манифесты (Д2)"). Paste under jobs: in
+  # U-Said/DuPanel-releases .github/workflows/build.yml, after the job «publish».
+  # The tag decides: v1.* (Windows) -> winget PR via wingetcreate; v4.* (macOS) -> Homebrew cask
+  # U-Said/homebrew-tap; other tags -> nothing. Scoop needs nothing (Excavator updates it).
+  # A failure here never fails or undoes the release: continue-on-error, and the release is already
+  # published by «publish». A missing secret -> ::warning:: and the step succeeds.
+  manifests:
+    if: >-
+      always() && !cancelled() && needs.publish.result == 'success'
+      && inputs.publish && inputs.release != ''
+      && (startsWith(inputs.release, 'v1.') || startsWith(inputs.release, 'v4.'))
+    needs: publish
+    continue-on-error: true
+    runs-on: ${{ startsWith(inputs.release, 'v1.') && 'windows-latest' || 'ubuntu-latest' }}
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: U-Said/DuPanel
+          ref: ${{ inputs.ref }}
+          ssh-key: ${{ secrets.DUPANEL_DEPLOY_KEY }}
+          persist-credentials: false
+          sparse-checkout: tool/manifests
+
+      - name: winget U-Said.DuPanel (${{ inputs.release }})
+        if: startsWith(inputs.release, 'v1.')
+        shell: pwsh
+        env:
+          TAG: ${{ inputs.release }}
+          WINGET_TOKEN: ${{ secrets.WINGET_TOKEN }}
+        run: ./tool/manifests/update_winget.ps1 -Tag $env:TAG -Repo $env:GITHUB_REPOSITORY -WorkDir (Join-Path $env:RUNNER_TEMP winget)
+
+      - name: Homebrew cask dupanel (${{ inputs.release }})
+        if: startsWith(inputs.release, 'v4.')
+        shell: bash
+        env:
+          TAG: ${{ inputs.release }}
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: bash tool/manifests/update_cask.sh "$TAG" "$GITHUB_REPOSITORY"

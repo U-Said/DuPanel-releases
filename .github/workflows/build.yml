@@ -18,6 +18,10 @@ on:
       release:
         description: "Тег выпуска, куда добавить пакеты (нужен только при publish)"
         default: ""
+      replace:
+        description: "Заменить файлы, которые уже есть в выпуске (ломает SHA-256 в манифестах — только осознанно)"
+        type: boolean
+        default: false
       targets:
         description: "Что собирать"
         type: choice
@@ -459,10 +463,36 @@ jobs:
           path: DuPanel-macOS.zip
           retention-days: 3
 
+  # DuPanel-7zip-sources.tar for the Windows, Linux and macOS releases (LGPL: the source next to the
+  # object code): the official 7-Zip source package (SHA-256 pinned in third_party/7zip/sevenzip.cmake),
+  # the scripts that fetch and check the official 7-Zip programs, and SOURCES.txt with the exact
+  # media-kit build of libmpv for macOS (tool/make_sources.sh). Its own job: a failure here never
+  # touches the packages.
+  sources-7zip:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: U-Said/DuPanel
+          ref: ${{ inputs.ref }}
+          ssh-key: ${{ secrets.DUPANEL_DEPLOY_KEY }}
+          persist-credentials: false
+
+      - name: Архив исходников 7-Zip для релиза
+        run: OUT="$RUNNER_TEMP/sources" bash tool/make_sources.sh 7zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DuPanel-7zip-sources
+          path: ${{ runner.temp }}/sources/DuPanel-7zip-sources.tar
+          if-no-files-found: error
+          retention-days: 3
+
   linux:
     if: inputs.targets == 'all' || inputs.targets == 'linux'
     runs-on: ubuntu-22.04
-    timeout-minutes: 60
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
         with:
@@ -519,6 +549,22 @@ jobs:
           mkdir -p build/linux/x64/release/bundle/licenses/libmpv
           cp tool/linux/build_libmpv.sh tool/linux/bundle_libs.sh build/linux/x64/release/bundle/licenses/libmpv/
 
+      # DuPanel is closed source: nothing GPL. libmpv.so.2 — the same check as libmpv-2.dll on Windows:
+      # FFmpeg's configuration inside it has no --enable-gpl, --enable-version3 or --enable-nonfree and
+      # its license is «LGPL version 2.1 or later». The Ubuntu libraries bundle_libs.sh copied into lib/:
+      # licenses/system/LIBRARIES.txt and <package>.copyright are written, and a package that is GPL/AGPL
+      # (all of it or its main part) or has a license that is not recognised fails the job — the rule is at the top of tool/linux/system_libs.py.
+      - name: Без GPL — libmpv.so.2 и системные библиотеки
+        run: |
+          B=build/linux/x64/release/bundle
+          MPV="$B/lib/libmpv.so.2"
+          strings -a "$MPV" | grep -m1 -E -- '--(prefix|enable-static)=?' || true
+          for flag in --enable-gpl --enable-version3 --enable-nonfree; do
+            if grep -aqF -- "$flag" "$MPV"; then echo "::error::libmpv.so.2: FFmpeg с $flag (GPL / не LGPL-2.1)"; exit 1; fi
+          done
+          grep -aqF 'LGPL version 2.1 or later' "$MPV" || { echo "::error::libmpv.so.2: нет лицензии FFmpeg «LGPL version 2.1 or later»"; exit 1; }
+          python3 tool/linux/system_libs.py notices "$B"
+
       - name: Проверка встроенного плеера на чистых системах
         run: |
           mkdir -p samples
@@ -552,6 +598,7 @@ jobs:
           read -r MPV_NAME MPV_PATH < <(ldd "$B/lib/libmedia_kit_video_plugin.so" | awk '/libmpv/ { print $1, $3 }'); echo "libmpv: $MPV_NAME => $MPV_PATH"
           [[ "$MPV_NAME" == libmpv.so.2 && "$(realpath "$MPV_PATH")" == "$(realpath "$B/lib/libmpv.so.2")" ]] || { echo "libmedia_kit_video_plugin.so берёт libmpv не из пакета"; exit 1; }
           [[ -f "$B/licenses/libmpv/build_libmpv.sh" ]] || { echo "Нет сценария сборки libmpv (LGPL)"; exit 1; }
+          [[ -s "$B/licenses/system/LIBRARIES.txt" ]] || { echo "Нет licenses/system/LIBRARIES.txt (системные библиотеки)"; exit 1; }
           du -sh "$B/lib"
           [[ -f "$B/lib/libpdfium.so" ]] || { echo "Нет lib/libpdfium.so (просмотр PDF)"; exit 1; }
           echo "glibc: $(ldd --version | head -1)"
@@ -571,10 +618,49 @@ jobs:
           path: DuPanel-Linux.tar.gz
           retention-days: 3
 
+      # LGPL-2.1 §6: the exact sources of libmpv.so.2 (DuPanel-libmpv-linux-sources.tar, the trees
+      # build_libmpv.sh builds) and of the Ubuntu libraries in lib/ (DuPanel-linux-system-libs-sources.tar,
+      # apt-get source of every package in LIBRARIES.txt), attached to the release next to the package.
+      # They come after the package is uploaded: a failure here fails the job (and shows), but
+      # DuPanel-Linux is already there.
+      - name: Архив исходников libmpv для релиза
+        run: WORK="$RUNNER_TEMP/libmpv-sources-src" OUT="$RUNNER_TEMP/sources" bash tool/linux/build_libmpv.sh sources
+
+      - name: Архив исходников системных библиотек для релиза
+        run: |
+          # deb-src for the Ubuntu archive. The runner image points sources.list at
+          # mirror+file:/etc/apt/apt-mirrors.txt (no "ubuntu" in the line), so the deb-src lines are
+          # written explicitly for this release, not derived from the deb lines.
+          . /etc/os-release
+          C="$VERSION_CODENAME"
+          {
+            echo "deb-src http://archive.ubuntu.com/ubuntu $C main restricted universe multiverse"
+            echo "deb-src http://archive.ubuntu.com/ubuntu $C-updates main restricted universe multiverse"
+            echo "deb-src http://security.ubuntu.com/ubuntu $C-security main restricted universe multiverse"
+          } | sudo tee /etc/apt/sources.list.d/dupanel-src.list
+          sudo apt-get update
+          # deb-src must work before the sources are fetched: a clear error instead of a failed apt-get source.
+          apt-cache showsrc zlib | grep -q '^Package: zlib' || { echo "::error::deb-src is not available: apt-get source cannot fetch the sources"; exit 1; }
+          python3 tool/linux/system_libs.py sources build/linux/x64/release/bundle "$RUNNER_TEMP/sources"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DuPanel-libmpv-linux-sources
+          path: ${{ runner.temp }}/sources/DuPanel-libmpv-linux-sources.tar
+          if-no-files-found: error
+          retention-days: 3
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DuPanel-linux-system-libs-sources
+          path: ${{ runner.temp }}/sources/DuPanel-linux-system-libs-sources.tar
+          if-no-files-found: error
+          retention-days: 3
+
   # Готовые пакеты — в выпуск DuPanel-releases (постоянные имена, на них ведёт README).
   publish:
     if: always() && inputs.publish && inputs.release != '' && !cancelled()
-    needs: [libmpv-windows, windows, macos, linux]
+    needs: [libmpv-windows, windows, macos, linux, sources-7zip]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -588,10 +674,20 @@ jobs:
         run: |
           set -e
           files=()
-          for f in DuPanel-Windows.zip DuPanel-Windows-arm64.zip DuPanel-macOS.zip DuPanel-Linux.tar.gz DuPanel-libmpv-windows-sources.tar; do
+          for f in DuPanel-Windows.zip DuPanel-Windows-arm64.zip DuPanel-macOS.zip DuPanel-Linux.tar.gz DuPanel-libmpv-windows-sources.tar DuPanel-7zip-sources.tar DuPanel-libmpv-linux-sources.tar DuPanel-linux-system-libs-sources.tar; do
             p=$(find dl -name "$f" -type f | head -1)
             [ -n "$p" ] && files+=("$p") || echo "::warning::нет $f"
           done
           [ ${#files[@]} -gt 0 ] || { echo "::error::нечего публиковать"; exit 1; }
-          gh release upload "${{ inputs.release }}" "${files[@]}" --clobber --repo "$GITHUB_REPOSITORY"
+          # Files of a published release are never replaced (their SHA-256 is in winget, Scoop… manifests):
+          # an existing name stops the job unless the input «replace» is set on purpose.
+          have=$(gh release view "${{ inputs.release }}" --repo "$GITHUB_REPOSITORY" --json assets -q '.assets[].name')
+          for p in "${files[@]}"; do
+            n=$(basename "$p")
+            if grep -qxF "$n" <<<"$have" && [ "${{ inputs.replace }}" != "true" ]; then
+              echo "::error::$n уже есть в выпуске ${{ inputs.release }} — не заменяю (нужен replace)"; exit 1
+            fi
+          done
+          if [ "${{ inputs.replace }}" = "true" ]; then clobber=--clobber; else clobber=; fi
+          gh release upload "${{ inputs.release }}" "${files[@]}" $clobber --repo "$GITHUB_REPOSITORY"
           ls -la "${files[@]}"

@@ -6,7 +6,7 @@ Dual-pane file manager in the spirit of Total Commander — for Windows, macOS, 
 
 ## Download
 
-Version **1.13** — one version for every system.
+Versions: **Android 2.14**, Windows / macOS / Linux **1.13**. From the 14th release each system has its own first digit: Windows 1.xx, Android 2.xx, Linux 3.xx, macOS 4.xx.
 
 | Platform | File |
 |---|---|
@@ -37,7 +37,7 @@ The links always point to the latest version. All versions and what is new are i
 **Windows.** Unpack the zip into any folder (for example `C:\Programs\DuPanel`) and run `DuPanel.exe`. Settings live next to it in `DuPanel.json` — the program is portable. To update, replace the folder contents.
 **macOS.** Unpack, move DuPanel to Applications. The first time, right-click → Open (the app is not notarized).
 **Linux.** Unpack, run `./dupanel`; `./install.sh` adds it to the applications menu. Everything needed, the player included, is inside the package.
-**Android.** Open the APK on the phone and allow installing from this source. On first start DuPanel asks for access to all files — it needs it to manage files. 1.13 installs over the older DuPanel 1.12 and keeps its settings.
+**Android.** Open the APK on the phone and allow installing from this source. On first start DuPanel asks for access to all files — it needs it to manage files. A new version installs over the older one and keeps its settings.
 
 [Privacy policy](https://u-said.github.io/dupanel-privacy/) — DuPanel collects nothing; files go only to servers you connect to yourself.
 
@@ -55,7 +55,7 @@ DuPanel is free. If it helps you, you can [support the author with a voluntary d
 
 ### Скачать
 
-Версия **1.13** — одна версия для всех систем.
+Версии: **Android 2.14**, Windows / macOS / Linux **1.13**. С 14-го выпуска у каждой системы своя первая цифра: Windows 1.xx, Android 2.xx, Linux 3.xx, macOS 4.xx.
 
 | Система | Файл |
 |---|---|
@@ -86,7 +86,7 @@ DuPanel is free. If it helps you, you can [support the author with a voluntary d
 **Windows.** Распакуйте архив в любую папку (например, `C:\Programs\DuPanel`) и запустите `DuPanel.exe`. Настройки лежат рядом, в `DuPanel.json` — программа портативная. Для обновления замените содержимое папки.
 **macOS.** Распакуйте и перенесите DuPanel в «Программы». В первый раз — правый щелчок → «Открыть» (программа не нотаризована).
 **Linux.** Распакуйте, запустите `./dupanel`; `./install.sh` добавит её в меню программ. Всё нужное, включая плеер, уже внутри пакета.
-**Android.** Откройте APK на телефоне и разрешите установку из этого источника. При первом запуске DuPanel попросит доступ ко всем файлам — без него файловый менеджер не может работать. 1.13 ставится поверх прежнего DuPanel 1.12, настройки сохраняются.
+**Android.** Откройте APK на телефоне и разрешите установку из этого источника. При первом запуске DuPanel попросит доступ ко всем файлам — без него файловый менеджер не может работать. Новая версия ставится поверх прежней, настройки сохраняются.
 
 [Политика конфиденциальности](https://u-said.github.io/dupanel-privacy/) — DuPanel ничего не собирает; файлы уходят только на серверы, к которым вы подключаетесь сами.
 

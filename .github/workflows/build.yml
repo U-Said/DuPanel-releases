@@ -28,6 +28,10 @@ on:
         type: choice
         options: [macos-15, macos-15-intel, macos-14]
         default: macos-15
+      msix:
+        description: "Пакеты MSIX для Microsoft Store (x64, ARM64 и общий .msixbundle) — только как артефакты сборки"
+        type: boolean
+        default: true
 
 permissions:
   contents: read
@@ -295,6 +299,88 @@ jobs:
           path: ${{ matrix.artifact }}.zip
           retention-days: 3
 
+      # Microsoft Store: the same Release folder (already checked above) as an MSIX package, after the
+      # zip is uploaded. continue-on-error on every MSIX step: an MSIX failure shows as a failed step
+      # (and a missing *-msix artifact) but never fails this job, so a job that needs `windows` (the
+      # release publish in DuPanel-releases) still gets the zips. Unsigned: the Store signs packages itself.
+      # Identity from the repository variables (Partner Center → Product identity); while they are
+      # not set, make_msix.ps1 uses placeholders. makeappx checks the manifest: an invalid one fails here.
+      - name: MSIX для Microsoft Store ${{ matrix.arch }}
+        if: inputs.msix
+        continue-on-error: true
+        shell: pwsh
+        env:
+          MSIX_IDENTITY_NAME: ${{ vars.MSIX_IDENTITY_NAME }}
+          MSIX_PUBLISHER: ${{ vars.MSIX_PUBLISHER }}
+          MSIX_PUBLISHER_DISPLAY_NAME: ${{ vars.MSIX_PUBLISHER_DISPLAY_NAME }}
+        run: |
+          $rel = (Get-ChildItem build\windows -Recurse -Filter DuPanel.exe | Where-Object FullName -like '*Release*' | Select-Object -First 1).DirectoryName
+          tool/windows/make_msix.ps1 -Release $rel -Arch ${{ matrix.arch }} -Out "${{ matrix.artifact }}.msix"
+
+      # For trying the package by hand (sideloading) only when the secret MSIX_TEST_PFX (a .pfx in
+      # base64) is set: a separate package signed with that test certificate, Publisher = its subject.
+      - name: MSIX для проверки (тестовая подпись, если есть сертификат)
+        if: inputs.msix
+        continue-on-error: true
+        shell: pwsh
+        env:
+          MSIX_TEST_PFX: ${{ secrets.MSIX_TEST_PFX }}
+          MSIX_TEST_PFX_PASSWORD: ${{ secrets.MSIX_TEST_PFX_PASSWORD }}
+          MSIX_IDENTITY_NAME: ${{ vars.MSIX_IDENTITY_NAME }}
+          MSIX_PUBLISHER_DISPLAY_NAME: ${{ vars.MSIX_PUBLISHER_DISPLAY_NAME }}
+        run: |
+          if (-not $env:MSIX_TEST_PFX) { 'Нет секрета MSIX_TEST_PFX — подписанный пакет не собирается'; exit 0 }
+          $pfx = "$env:RUNNER_TEMP\msix-test.pfx"
+          [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:MSIX_TEST_PFX))
+          try {
+            $rel = (Get-ChildItem build\windows -Recurse -Filter DuPanel.exe | Where-Object FullName -like '*Release*' | Select-Object -First 1).DirectoryName
+            tool/windows/make_msix.ps1 -Release $rel -Arch ${{ matrix.arch }} -Out "${{ matrix.artifact }}-sideload.msix" -Pfx $pfx -PfxPassword "$env:MSIX_TEST_PFX_PASSWORD"
+          } finally { Remove-Item -Force $pfx -ErrorAction SilentlyContinue }
+
+      - uses: actions/upload-artifact@v4
+        if: inputs.msix
+        continue-on-error: true
+        with:
+          name: ${{ matrix.artifact }}-msix
+          path: ${{ matrix.artifact }}*.msix
+          if-no-files-found: error
+          retention-days: 14
+
+  # Both architectures in one .msixbundle (the Store takes it, or the two .msix separately).
+  # continue-on-error: a failed bundle (e.g. one .msix missing) never fails the run.
+  msix-bundle:
+    if: inputs.msix && (inputs.targets == 'all' || inputs.targets == 'windows')
+    needs: windows
+    continue-on-error: true
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: U-Said/DuPanel
+          ref: ${{ inputs.ref }}
+          ssh-key: ${{ secrets.DUPANEL_DEPLOY_KEY }}
+          persist-credentials: false
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: DuPanel-Windows*-msix
+          path: msix
+          merge-multiple: true
+
+      - name: DuPanel-Windows.msixbundle
+        shell: pwsh
+        run: |
+          Get-ChildItem msix | Format-Table Name, Length -AutoSize
+          tool/windows/make_msix.ps1 -Bundle msix\DuPanel-Windows.msix, msix\DuPanel-Windows-arm64.msix -Out DuPanel-Windows.msixbundle
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DuPanel-Windows-msixbundle
+          path: DuPanel-Windows.msixbundle
+          if-no-files-found: error
+          retention-days: 14
+
   macos:
     if: inputs.targets == 'all' || inputs.targets == 'macos'
     runs-on: ${{ inputs.mac_runner || 'macos-15' }}
@@ -419,7 +505,12 @@ jobs:
           flutter doctor -v
 
       - name: Сборка Linux
-        run: PKG_CONFIG_PATH="$MPV_PREFIX/lib/pkgconfig" flutter build linux --release
+        # Linux is 3.xx: pubspec 1.1.4+114 is built as 3.1.4+114 (lib/core/version.dart).
+        run: |
+          NAME=$(sed -n 's/^version: *1\.\([0-9]*\.[0-9]*\)+.*/3.\1/p' pubspec.yaml)
+          echo "build-name: $NAME"
+          PKG_CONFIG_PATH="$MPV_PREFIX/lib/pkgconfig" flutter build linux --release --build-name="$NAME"
+
 
       - name: libmpv и её библиотеки — внутрь программы
         run: |
